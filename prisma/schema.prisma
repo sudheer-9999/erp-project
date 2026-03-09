@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Teacher in the school.
+model Teacher {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String    @unique
+  createdAt DateTime  @default(now())
+
+  // Relations
+  subjects          TeacherSubject[]
+  schedules         ClassSchedule[]       @relation("TeacherSchedules")
+  substituteClasses ClassSchedule[]       @relation("SubstituteTeacherSchedules")
+  attendanceRecords TeacherAttendance[]
+}
+
+/// Academic subject, e.g. Mathematics, Science.
+model Subject {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  // Relations
+  teacherSubjects TeacherSubject[]
+  schedules       ClassSchedule[]
+}
+
+/// Combination of class (grade) and section, e.g. "10" - "A".
+model ClassSection {
+  id        Int            @id @default(autoincrement())
+  className String
+  section   String
+
+  // Relations
+  schedules ClassSchedule[]
+
+  @@unique([className, section])
+}
+
+/// Join table mapping which teacher can teach which subject.
+model TeacherSubject {
+  teacherId Int
+  subjectId Int
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([teacherId, subjectId])
+}
+
+/// Daily attendance of teachers.
+model TeacherAttendance {
+  id        Int                 @id @default(autoincrement())
+  teacherId Int
+  date      DateTime
+  status    AttendanceStatus
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, date])
+  @@index([date])
+}
+
+/// Class schedule for a particular period / time slot.
+model ClassSchedule {
+  id                Int                 @id @default(autoincrement())
+  classSectionId    Int
+  subjectId         Int
+  teacherId         Int
+  /// Calendar date of the class (without time-of-day semantics).
+  date              DateTime
+  startTime         DateTime
+  endTime           DateTime
+  status            ScheduleStatus      @default(Scheduled)
+  substituteTeacherId Int?              // optional substitute
+
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher      Teacher      @relation("TeacherSchedules", fields: [teacherId], references: [id], onDelete: Cascade)
+  substituteTeacher Teacher? @relation("SubstituteTeacherSchedules", fields: [substituteTeacherId], references: [id])
+
+  @@index([date])
+  @@index([classSectionId, date])
+}
+
+/// Attendance status for a teacher on a given day.
+enum AttendanceStatus {
+  Present
+  Absent
+  Leave
+}
+
+/// Status of a scheduled class.
+enum ScheduleStatus {
+  Scheduled
+  Cancelled
+  SubstituteAssigned
+}
